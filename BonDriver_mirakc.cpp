@@ -435,7 +435,25 @@ const BOOL CBonTuner::SetChannel(const DWORD dwSpace, const DWORD dwChannel)
 		swprintf_s(retune_url, retune_len,
 			L"/api/tuners/%d/retune/%S/%S", g_Tuner,
 			type_string.c_str(), channel_string.c_str());
-		if (!SendRequest(retune_url)) {
+
+		HINTERNET stream_request = NULL;
+		::EnterCriticalSection(&m_CriticalSection);
+		stream_request = hRequest;
+		hRequest = NULL;
+		::LeaveCriticalSection(&m_CriticalSection);
+
+		const BOOL retune_result = SendRequest(retune_url);
+
+		HINTERNET retune_request = NULL;
+		::EnterCriticalSection(&m_CriticalSection);
+		retune_request = hRequest;
+		hRequest = stream_request;
+		::LeaveCriticalSection(&m_CriticalSection);
+
+		if (retune_request) {
+			WinHttpCloseHandle(retune_request);
+		}
+		if (!retune_result) {
 			return TRUE;  // to complete channel setting
 		}
 	}
