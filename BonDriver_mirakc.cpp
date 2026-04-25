@@ -55,6 +55,8 @@ static int Init(HMODULE hModule)
 		L"GLOBAL", L"PRIORITY", 0, g_IniFilePath);
 	g_Service_Split = GetPrivateProfileInt(
 		L"GLOBAL", L"SERVICE_SPLIT", 0, g_IniFilePath);
+	g_Tuner = GetPrivateProfileInt(
+		L"GLOBAL", L"TUNER", -1, g_IniFilePath);
 
 	return 0;
 }
@@ -413,22 +415,47 @@ const BOOL CBonTuner::SetChannel(const DWORD dwSpace, const DWORD dwChannel)
 	picojson::object& channel_obj =
 		g_Channel_JSON.get(Bon_Channel).get<picojson::object>();
 
-	// Server request
-	const int len = 64;
-	wchar_t url[len];
+	std::string type_string;
+	std::string channel_string;
 	if (g_Service_Split == 1) {
-		const int64_t id = (int64_t)channel_obj["id"].get<double>();
-		swprintf_s(url, len,
-			L"/api/services/%lld/stream?decode=%d", id, g_DecodeB25);
+		picojson::object& channel_detail =
+			channel_obj["channel"].get<picojson::object>();
+		type_string = channel_detail["type"].get<std::string>();
+		channel_string = channel_detail["channel"].get<std::string>();
 	}
 	else {
-		const char *type = channel_obj["type"].get<std::string>().c_str();
-		const char *channel = channel_obj["channel"].get<std::string>().c_str();
-		swprintf_s(url, len,
-			L"/api/channels/%S/%S/stream?decode=%d", type, channel, g_DecodeB25);
+		type_string = channel_obj["type"].get<std::string>();
+		channel_string = channel_obj["channel"].get<std::string>();
 	}
-	if (!SendRequest(url)) {
-		return TRUE;  // to complete channel setting
+
+	if (g_Tuner >= 0) {
+		const int retune_len = 128;
+		wchar_t retune_url[retune_len];
+		swprintf_s(retune_url, retune_len,
+			L"/api/tuners/%d/retune/%S/%S", g_Tuner,
+			type_string.c_str(), channel_string.c_str());
+		if (!SendRequest(retune_url)) {
+			return TRUE;  // to complete channel setting
+		}
+	}
+
+	if (!(g_Tuner >= 0 && hRequest)) {
+		// Server request
+		const int len = 128;
+		wchar_t url[len];
+		if (g_Service_Split == 1) {
+			const int64_t id = (int64_t)channel_obj["id"].get<double>();
+			swprintf_s(url, len,
+				L"/api/services/%lld/stream?decode=%d", id, g_DecodeB25);
+		}
+		else {
+			swprintf_s(url, len,
+				L"/api/channels/%S/%S/stream?decode=%d",
+				type_string.c_str(), channel_string.c_str(), g_DecodeB25);
+		}
+		if (!SendRequest(url)) {
+			return TRUE;  // to complete channel setting
+		}
 	}
 
 	// チャンネル情報更新
