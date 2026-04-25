@@ -428,7 +428,8 @@ const BOOL CBonTuner::SetChannel(const DWORD dwSpace, const DWORD dwChannel)
 		channel_string = channel_obj["channel"].get<std::string>();
 	}
 
-	if (g_Tuner >= 0) {
+	bool first_tune = (m_dwCurChannel == 0xffffffff);
+	if (g_Tuner >= 0 && !first_tune) {
 		const int retune_len = 128;
 		wchar_t retune_url[retune_len];
 		swprintf_s(retune_url, retune_len,
@@ -439,19 +440,33 @@ const BOOL CBonTuner::SetChannel(const DWORD dwSpace, const DWORD dwChannel)
 		}
 	}
 
-	if (!(g_Tuner >= 0 && hRequest)) {
+	if (g_Tuner < 0 || first_tune) {
 		// Server request
 		const int len = 128;
 		wchar_t url[len];
 		if (g_Service_Split == 1) {
 			const int64_t id = (int64_t)channel_obj["id"].get<double>();
-			swprintf_s(url, len,
-				L"/api/services/%lld/stream?decode=%d", id, g_DecodeB25);
+			if (g_Tuner >= 0) {
+				swprintf_s(url, len,
+					L"/api/services/%lld/stream?decode=%d&tuner=%d",
+					id, g_DecodeB25, g_Tuner);
+			}
+			else {
+				swprintf_s(url, len,
+					L"/api/services/%lld/stream?decode=%d", id, g_DecodeB25);
+			}
 		}
 		else {
-			swprintf_s(url, len,
-				L"/api/channels/%S/%S/stream?decode=%d",
-				type_string.c_str(), channel_string.c_str(), g_DecodeB25);
+			if (g_Tuner >= 0) {
+				swprintf_s(url, len,
+					L"/api/channels/%S/%S/stream?decode=%d&tuner=%d",
+					type_string.c_str(), channel_string.c_str(), g_DecodeB25, g_Tuner);
+			}
+			else {
+				swprintf_s(url, len,
+					L"/api/channels/%S/%S/stream?decode=%d",
+					type_string.c_str(), channel_string.c_str(), g_DecodeB25);
+			}
 		}
 		if (!SendRequest(url)) {
 			return TRUE;  // to complete channel setting
